@@ -1,11 +1,14 @@
 import express from 'express';
 import bodyParser from 'body-parser';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './src/swagger.js';
+import tasksRouter from './src/routes/tasks.js';
 
 const app = express();
 
 const PORT = 3000;
 
-import tasksRouter from './src/routes/tasks.js';
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true })); // Serve Swagger UI at /api-docs with the generated swaggerSpec
 
 app.use(bodyParser.json()); // Middleware to parse JSON request bodies
 
