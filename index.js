@@ -8,7 +8,7 @@ const app = express();
 
 const PORT = 3000;
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true })); // Serve Swagger UI at /api-docs with the generated swaggerSpec
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec)); // Serve Swagger UI at /api-docs
 
 app.use(bodyParser.json()); // Middleware to parse JSON request bodies
 

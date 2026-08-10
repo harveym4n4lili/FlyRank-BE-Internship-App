@@ -25,10 +25,60 @@ const mockData = [
   },
 ]; // Mock data for testing purposes
 
+/**
+ * @swagger
+ * /tasks:
+ *   get:
+ *     summary: Get all tasks
+ *     responses:
+ *       200:
+ *         description: List of all tasks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   task_name:
+ *                     type: string
+ *                   task_description:
+ *                     type: string
+ *                   completed:
+ *                     type: boolean
+ */
 router.get('/', (req, res) => {
     res.send(mockData);
 }) // GET route to fetch all tasks
 
+/**
+ * @swagger
+ * /tasks:
+ *   post:
+ *     summary: Create a new task
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - task_name
+ *             properties:
+ *               task_name:
+ *                 type: string
+ *               task_description:
+ *                 type: string
+ *               completed:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Task created successfully
+ *       400:
+ *         description: Invalid input
+ */
 router.post('/', (req, res) => {
     const newTask = req.body; // Get the new task data from the request body
 
@@ -40,6 +90,23 @@ router.post('/', (req, res) => {
     }
 }); // POST route to create a new task
 
+/**
+ * @swagger
+ * /tasks/{id}:
+ *   get:
+ *     summary: Get a specific task
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Task found
+ *       404:
+ *         description: Task not found
+ */
 router.get('/:id', (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
@@ -52,6 +119,23 @@ router.get('/:id', (req, res) => {
     }
 }); // GET route to fetch a specific task by ID
 
+/**
+ * @swagger
+ * /tasks/{id}:
+ *   delete:
+ *     summary: Delete a task
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       204:
+ *         description: Task deleted successfully
+ *       404:
+ *         description: Task not found
+ */
 router.delete('/:id', (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
@@ -66,6 +150,36 @@ router.delete('/:id', (req, res) => {
     }
 }); // DELETE route to delete a specific task by ID
 
+/**
+ * @swagger
+ * /tasks/{id}:
+ *   patch:
+ *     summary: Update a task
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               task_name:
+ *                 type: string
+ *               task_description:
+ *                 type: string
+ *               completed:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Task updated
+ *       404:
+ *         description: Task not found
+ */
 router.patch('/:id', (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
