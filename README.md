@@ -2,6 +2,13 @@
 
 A simple CRUD API for managing tasks, built with Node.js and Express. Fully documented with Swagger UI for easy testing.
 
+## Assignment Notes
+
+This repo contains weekly branches for the FlyRank AI Internship Backend Program.
+- Each week has its own branch
+- Each branch contains multiple commits with a final commit of each branch represents the assignment turn-in.
+- Main branch contains stable, merged versions
+
 ## How to Run from Github
 
 1. Clone the repository:
@@ -51,11 +58,4 @@ A REST API for creating, reading, updating, and deleting tasks. Built as part of
 - **swagger-ui-express** - API documentation UI
 - **swagger-jsdoc** - API documentation generator
 - **body-parser** - Request body parsing
-
-## Assignment Notes
-
-This repo contains weekly branches for the FlyRank AI Internship Backend Program.
-- Each week has its own branch
-- Each branch contains multiple commits with a final commit of each branch represents the assignment turn-in.
-- Main branch contains stable, merged versions
 ---
