@@ -1,5 +1,6 @@
 import express from 'express';
 import {v4 as uuidv4} from 'uuid';
+import tasks from '../services/tasks.js';
 
 const router = express.Router();
 
@@ -50,7 +51,14 @@ const mockData = [
  *                     type: boolean
  */
 router.get('/', (req, res) => {
-    res.send(mockData);
+    // MOCK DATA APPROACH
+    //res.send(mockData);
+
+    try {
+        res.json(tasks.getMultiple(req.query.page)); // Fetch tasks from the database and send them in the response
+    } catch (error) {
+        res.status(500).send({ error: 'An error occurred while fetching tasks' });
+    }
 }) // GET route to fetch all tasks
 
 /**
