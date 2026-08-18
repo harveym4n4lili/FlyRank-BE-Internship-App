@@ -11,6 +11,8 @@ This repo contains weekly branches for the FlyRank AI Internship Backend Program
 
 ## How to Run from Github
 
+**This assignment is A2, so ensure to select the Week 3 A2 branch before cloning.**
+
 1. Clone the repository:
    ```bash
    git clone <repository-url>
@@ -32,30 +34,32 @@ This repo contains weekly branches for the FlyRank AI Internship Backend Program
    - Visit `http://localhost:3000/docs` for Swagger UI
    - Or use curl: `curl http://localhost:3000/tasks`
 
-## What This Is
+## A2: Why was SQLite chosen?
+1. SQLite doesn't need a separate database server running. The database file lives directly in the project.
+2. Requires no credentials or connection strings, simple enough for learning purposes
+3. Sqlite has a synchronous API it works well with such as better-sqlite3 which is javascript friendly and is easy to learn.
+### Database Location
+`project-root/src/db/tasks.db`
+### Database Query Exploration
 
-A REST API for creating, reading, updating, and deleting tasks. Built as part of Week 2 backend internship learning, demonstrating:
-- RESTful API design principles
-- Complete CRUD operations
-- Input validation
-- Proper HTTP status codes
-- OpenAPI/Swagger documentation
+**1. Find tasks updated in the last 24 hours:**
+```sql
+SELECT * FROM tasks 
+WHERE updated_at > datetime('now', '-1 day');
+```
 
-## API Endpoints
+**2. Get tasks by completion status:**
+```sql
+SELECT * FROM tasks WHERE completed = 1;  -- Completed tasks
+SELECT * FROM tasks WHERE completed = 0;  -- Open tasks
+```
 
-| Method | Endpoint | Description | Status |
-|--------|----------|-------------|--------|
-| GET | `/tasks` | Get all tasks | 200 |
-| GET | `/tasks/:id` | Get a specific task | 200 / 404 |
-| POST | `/tasks` | Create a new task | 201 / 400 |
-| PATCH | `/tasks/:id` | Update a task | 200 / 404 |
-| DELETE | `/tasks/:id` | Delete a task | 204 / 404 |
+**3. Get tasks ordered by creation date (newest first):**
+```sql
+SELECT * FROM tasks ORDER BY created_at DESC;
+```
+#### Database Viewer
+For my database viewer, I installed a VSCode extension called SQLite3 Editor, which allows me to open db files and run SQL queries all within VSCode.
 
-## Technology Stack
-
-- **Node.js** - Runtime environment
-- **Express** - Web framework
-- **swagger-ui-express** - API documentation UI
-- **swagger-jsdoc** - API documentation generator
-- **body-parser** - Request body parsing
+![SQLite Database Viewer](./screenshots/screenshot-db.png)
 ---
