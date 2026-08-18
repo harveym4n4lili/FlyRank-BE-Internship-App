@@ -90,12 +90,13 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
     const newTask = req.body; // Get the new task data from the request body
 
-    if (!newTask.task_name) {
-        mockData.push({...newTask, id: uuidv4() }); // Add the new task to the mock data array
-        res.status(201).send(newTask); // Send a response with status 201 (Created) and the new task data
-    } else {
-        res.status(400).send({ error: 'Task name is required' }); // If task_name is missing, send a 400 response with an error message
+    try {
+        const createResult = tasks.create(newTask); // Create a new task in the database and send it in the response
+        res.status(201).send({ message: 'Task created successfully' }); // Send a success message with a 201 status 
+    } catch (error) {
+        res.status(400).send({ error: 'An error occurred while creating the task: ' + error.message }); // Send a 400 response with an error message if task creation fails
     }
+
 }); // POST route to create a new task
 
 /**
