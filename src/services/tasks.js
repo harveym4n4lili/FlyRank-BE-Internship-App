@@ -6,7 +6,7 @@ import config from '../../config.js';
 // perform any necessary processing before returning the data to the controller.
 // of course, operations here are called through the route API endpoints, which are defined in the routes/tasks.js file.
 
-function getMultiple(page = 1) {
+function getAllTasks(page = 1) {
     const offset = (page - 1) * config.listPerPage;
     const data = db.query('SELECT * FROM tasks LIMIT ?,?', [offset, config.listPerPage]);
     const meta = {page};
@@ -43,7 +43,7 @@ function validateCreate(task) {
     }
 }
 
-function create(task) {
+function createTask(task) {
     validateCreate(task); // validate the task object before creating it
     const { task_name, task_description, completed} = task; // destructure the task object to get its properties
 
@@ -65,7 +65,30 @@ function create(task) {
     return { message }; // return the message indicating the result of the operation
 }
 
+function getTaskById(id) {
+    const task = db.query('SELECT * FROM tasks WHERE id = ?', [id]); // query the database for a task with the given id
+
+    if (!task.length) {
+        let error = new Error('Task not found'); // throw an error if the task is not found
+        error.status = 404; // set the error status to 404 (Not Found)
+        throw error;
+    }
+
+    return task[0]; // return the found task
+}
+
+function deleteTaskById(id) {
+    const result = db.run('DELETE FROM tasks WHERE id = ?', [id]); // delete the task with the given id from the database
+
+    if (!result.changes) {
+        let error = new Error('Task not found'); // throw an error if the task is not found
+        error.status = 404; // set the error status to 404 (Not Found)
+        throw error;
+    }
+}
 export default {
-    getMultiple,
-    create
+    getAllTasks,
+    getTaskById,
+    deleteTaskById,
+    createTask
 }

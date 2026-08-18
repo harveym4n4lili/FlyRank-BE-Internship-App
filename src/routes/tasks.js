@@ -51,13 +51,10 @@ const mockData = [
  *                     type: boolean
  */
 router.get('/', (req, res) => {
-    // MOCK DATA APPROACH
-    //res.send(mockData);
-
     try {
-        res.json(tasks.getMultiple(req.query.page)); // Fetch tasks from the database and send them in the response
+        res.json(tasks.getAllTasks(req.query.page)); // Fetch tasks from the database and send them in the response
     } catch (error) {
-        res.status(500).send({ error: 'An error occurred while fetching tasks' });
+        res.status(404).send({ error: 'An error occurred while fetching tasks' });
     }
 }) // GET route to fetch all tasks
 
@@ -91,12 +88,11 @@ router.post('/', (req, res) => {
     const newTask = req.body; // Get the new task data from the request body
 
     try {
-        const createResult = tasks.create(newTask); // Create a new task in the database and send it in the response
+        const createResult = tasks.createTask(newTask); // Create a new task in the database and send it in the response
         res.status(201).send({ message: 'Task created successfully' }); // Send a success message with a 201 status 
     } catch (error) {
         res.status(400).send({ error: 'An error occurred while creating the task: ' + error.message }); // Send a 400 response with an error message if task creation fails
     }
-
 }); // POST route to create a new task
 
 /**
@@ -119,12 +115,11 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
-    const foundUser= mockData.find((task) => task.id === parseInt(taskId)); // Find the task with the matching ID in the mock data array
-
-    if (foundUser) {
-        res.send(foundUser); // If the task is found, send it in the response
-    } else {
-        res.status(404).send({ error: `Task ${taskId} not found` }); // If the task is not found, send a 404 response with an error message
+    try {
+        const findTaskResult = tasks.getTaskById(taskId);
+        res.status(200).send(findTaskResult); // Send the found task in the response
+    } catch (error) {
+        res.status(404).send({ error: `Task ${taskId} not found` }); // Send a 404 response with an error message if the task is not found});
     }
 }); // GET route to fetch a specific task by ID
 
@@ -148,14 +143,11 @@ router.get('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
-    const tasks = mockData.filter((task) => task.id !== parseInt(taskId)); // Filter out the task with the matching ID from the mock data array
-
-    if (tasks.length < mockData.length) {
-        mockData.length = 0; // Clear the mock data array
-        mockData.push(...tasks); // Add the filtered tasks back to the mock data array
-        res.send({ message: 'Task deleted successfully' }); // If the task is found and deleted, send a success message
-    } else {
-        res.status(404).send({ error: `Task ${taskId} not found` }); // If the task is not found, send a 404 response with an error message
+    try {
+        const deleteTaskResult = tasks.deleteTaskById(taskId); //
+        res.status(204).send(); // Send a 204 response indicating successful deletion
+    } catch (error) {
+        res.status(404).send({ error: `Task ${taskId} not found` }); // Send a 404 response with an error message if the task is not found
     }
 }); // DELETE route to delete a specific task by ID
 
