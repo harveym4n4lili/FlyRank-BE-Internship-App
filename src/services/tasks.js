@@ -1,17 +1,19 @@
 import db from '../services/db.js';
 import config from '../../config.js';
+import pool from '../db/connection.js';
 
 /// This file is used to handle the business logic related to tasks. 
 // In general, it will be used to retrieve data from the database and 
 // perform any necessary processing before returning the data to the controller.
 // of course, operations here are called through the route API endpoints, which are defined in the routes/tasks.js file.
 
-function getAllTasks(page = 1) {
+async function getAllTasks(page = 1) {
     const offset = (page - 1) * config.listPerPage;
-    const data = db.query('SELECT * FROM tasks LIMIT ?,?', [offset, config.listPerPage]);
+    const data = await pool.query('SELECT * FROM tasks LIMIT $1 OFFSET $2', [config.listPerPage, offset]);
     const meta = {page};
+    console.log('Retrieved tasks:', data.rows); // Log the retrieved tasks for debugging purposes
     return {
-        data,
+        data: data.rows,
         meta
     }
 }
@@ -65,16 +67,16 @@ function createTask(task) {
     return { message }; // return the message indicating the result of the operation
 }
 
-function getTaskById(id) {
-    const task = db.query('SELECT * FROM tasks WHERE id = ?', [id]); // query the database for a task with the given id
+async function getTaskById(id) {
+    const task = await pool.query('SELECT * FROM tasks WHERE id = $1', [id]); // query the database for a task with the given id
 
-    if (!task.length) {
+    if (!task.rows.length) {
         let error = new Error('Task not found'); // throw an error if the task is not found
         error.status = 404; // set the error status to 404 (Not Found)
         throw error;
     }
 
-    return task[0]; // return the found task
+    return { task: task.rows[0] }; // return the found task
 }
 
 function updatedTaskById(id, task) {

@@ -50,9 +50,9 @@ const mockData = [
  *                   completed:
  *                     type: boolean
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        res.json(tasks.getAllTasks(req.query.page)); // Fetch tasks from the database and send them in the response
+        res.json(await tasks.getAllTasks(req.query.page)); // Fetch tasks from the database and send them in the response
     } catch (error) {
         res.status(404).send({ error: 'An error occurred while fetching tasks' });
     }
@@ -112,11 +112,11 @@ router.post('/', (req, res) => {
  *       404:
  *         description: Task not found
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
     try {
-        const findTaskResult = tasks.getTaskById(taskId);
+        const findTaskResult = await tasks.getTaskById(taskId);
         res.status(200).send(findTaskResult); // Send the found task in the response
     } catch (error) {
         res.status(404).send({ error: `Task ${taskId} not found` }); // Send a 404 response with an error message if the task is not found});
