@@ -3,10 +3,12 @@ import bodyParser from 'body-parser';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './src/swagger.js';
 import tasksRouter from './src/routes/tasks.js';
+import initDB from './src/db/init.js';
 
 const app = express();
-
 const PORT = 3000;
+
+await initDB(); // Initialize the database
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec)); // Serve Swagger UI at /api-docs
 
