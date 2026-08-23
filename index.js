@@ -8,7 +8,12 @@ import initDB from './src/db/init.js';
 const app = express();
 const PORT = 3000;
 
-await initDB(); // Initialize the database
+try {
+  await initDB();
+} catch (error) {
+  console.error('Failed to initialize database:', error.message);
+  process.exit(1);
+}
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec)); // Serve Swagger UI at /api-docs
 

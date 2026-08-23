@@ -6,10 +6,16 @@ dotenv.config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-}); // START A CONNECTION POOL TO ALLOW QUERY CONNECTION TO OUR POSTGRE SQL DATABASE IN DOCKER
+});
 
-const result = await pool.query('SELECT NOW()'); // TEST QUERY TO CHECK IF THE CONNECTION IS SUCCESSFUL
-console.log('Database connection successful:', result.rows[0]);
+// Give database time to start in docker compose
+await new Promise(resolve => setTimeout(resolve, 2000));
 
+try {
+  const result = await pool.query('SELECT NOW()');
+  console.log('Database connection successful:', result.rows[0]);
+} catch (error) {
+  console.log('Database connection test failed, will retry on queries:', error.message);
+}
 
 export default pool;
