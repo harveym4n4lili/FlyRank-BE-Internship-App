@@ -11,12 +11,13 @@ This repo contains weekly branches for the FlyRank AI Internship Backend Program
 
 ## How to Run from Github
 
-**This assignment is A2, so ensure to select the Week 3 A2 branch before cloning.**
+**This assignment is A3, so ensure to select the Week 3 A3 branch before cloning.**
 
 1. Clone the repository:
    ```bash
    git clone <repository-url>
    cd <repository-name>
+   git checkout week-3-A3/containerize-your-stack
    ```
 
 2. Install dependencies through terminal:
@@ -24,12 +25,19 @@ This repo contains weekly branches for the FlyRank AI Internship Backend Program
    npm install
    ```
 
-3. Start the server:
+3. **Important: Docker Desktop is required to run the full stack (API + PostgreSQL database).**
+
+4. Start the server and database:
    ```bash
-   npm run dev
+   docker compose up
    ```
 
-4. Test the API:
+5. Stop the server and database:
+   ```bash
+   docker compose down
+   ```
+
+6. Test the API:
    - The API will start on `http://localhost:3000`
    - Visit `http://localhost:3000/docs` for Swagger UI
    - Or use curl: `curl http://localhost:3000/tasks`
