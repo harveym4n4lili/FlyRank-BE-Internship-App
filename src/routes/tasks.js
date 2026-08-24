@@ -50,9 +50,9 @@ const mockData = [
  *                   completed:
  *                     type: boolean
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        res.json(tasks.getAllTasks(req.query.page)); // Fetch tasks from the database and send them in the response
+        res.json(await tasks.getAllTasks(req.query.page)); // Fetch tasks from the database and send them in the response
     } catch (error) {
         res.status(404).send({ error: 'An error occurred while fetching tasks' });
     }
@@ -84,11 +84,11 @@ router.get('/', (req, res) => {
  *       400:
  *         description: Invalid input
  */
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     const newTask = req.body; // Get the new task data from the request body
 
     try {
-        const createResult = tasks.createTask(newTask); // Create a new task in the database and send it in the response
+        const createResult = await tasks.createTask(newTask); // Create a new task in the database and send it in the response
         res.status(201).send({ message: 'Task created successfully' }); // Send a success message with a 201 status 
     } catch (error) {
         res.status(400).send({ error: 'An error occurred while creating the task: ' + error.message }); // Send a 400 response with an error message if task creation fails
@@ -112,14 +112,15 @@ router.post('/', (req, res) => {
  *       404:
  *         description: Task not found
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
     try {
-        const findTaskResult = tasks.getTaskById(taskId);
+        const findTaskResult = await tasks.getTaskById(taskId);
         res.status(200).send(findTaskResult); // Send the found task in the response
     } catch (error) {
-        res.status(404).send({ error: `Task ${taskId} not found` }); // Send a 404 response with an error message if the task is not found});
+        const statusCode = error.status || 500;
+        res.status(statusCode).send({ error: error.message }); // Send a error code response with an error message if the task is not found
     }
 }); // GET route to fetch a specific task by ID
 
@@ -140,21 +141,22 @@ router.get('/:id', (req, res) => {
  *       404:
  *         description: Task not found
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
     try {
-        const deleteTaskResult = tasks.deleteTaskById(taskId); //
+        const deleteTaskResult = await tasks.deleteTaskById(taskId);
         res.status(204).send(); // Send a 204 response indicating successful deletion
     } catch (error) {
-        res.status(404).send({ error: `Task ${taskId} not found` }); // Send a 404 response with an error message if the task is not found
+        const statusCode = error.status || 500;
+        res.status(statusCode).send({ error: error.message }); // Send a error code response with an error message if the task is not found
     }
 }); // DELETE route to delete a specific task by ID
 
 /**
  * @swagger
  * /tasks/{id}:
- *   patch:
+ *   put:
  *     summary: Update a task
  *     parameters:
  *       - in: path
@@ -181,16 +183,17 @@ router.delete('/:id', (req, res) => {
  *       404:
  *         description: Task not found
  */
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     const taskId = req.params.id; // Get the task ID from the request parameters
 
     const { task_name, task_description, completed } = req.body; // Get the updated task data from the request body
 
     try {
-        const updateTaskResult = tasks.updateTaskById(taskId, { task_name, task_description, completed });
+        const updateTaskResult = await tasks.updateTaskById(taskId, { task_name, task_description, completed });
         res.status(200).send(updateTaskResult); // Send the updated task in the response
     } catch (error) {
-        res.status(404).send({ error: `Task ${taskId} not found` }); // Send a 404 response with an error message if the task is not found
+        const statusCode = error.status || 500;
+        res.status(statusCode).send({ error: error.message }); // Send a error code response with an error message if the task is not found
     }
 }); // PUT route to update a specific task by ID
 

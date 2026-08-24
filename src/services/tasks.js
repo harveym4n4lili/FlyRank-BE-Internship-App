@@ -1,17 +1,19 @@
 import db from '../services/db.js';
 import config from '../../config.js';
+import pool from '../db/connection.js';
 
 /// This file is used to handle the business logic related to tasks. 
 // In general, it will be used to retrieve data from the database and 
 // perform any necessary processing before returning the data to the controller.
 // of course, operations here are called through the route API endpoints, which are defined in the routes/tasks.js file.
 
-function getAllTasks(page = 1) {
+async function getAllTasks(page = 1) {
     const offset = (page - 1) * config.listPerPage;
-    const data = db.query('SELECT * FROM tasks LIMIT ?,?', [offset, config.listPerPage]);
+    const data = await pool.query('SELECT * FROM tasks LIMIT $1 OFFSET $2', [config.listPerPage, offset]);
     const meta = {page};
+    console.log('Retrieved tasks:', data.rows); // Log the retrieved tasks for debugging purposes
     return {
-        data,
+        data: data.rows,
         meta
     }
 }
@@ -43,7 +45,7 @@ function validateCreate(task) {
     }
 }
 
-function createTask(task) {
+async function createTask(task) {
     validateCreate(task); // validate the task object before creating it
     const { task_name, task_description, completed} = task; // destructure the task object to get its properties
 
@@ -51,33 +53,33 @@ function createTask(task) {
 
     const isCompleted = completed ? 1 : 0; // convert the boolean completed value to an integer (1 for true, 0 for false)
 
-    const result = db.run(
-        'INSERT INTO tasks (task_name, task_description, completed, created_at, updated_at) VALUES (@task_name, @task_description, @completed, @created_at, @updated_at)',
-        {task_name, task_description, completed: isCompleted, created_at: currentTimestamp, updated_at: currentTimestamp}
+    const result = await pool.query(
+        'INSERT INTO tasks (task_name, task_description, completed, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)',
+        [task_name, task_description, isCompleted, currentTimestamp, currentTimestamp]
     );
 
     let message = 'Error in creating task'; // default error message
 
-    if (result.changes) {
+    if (result.rowCount > 0) {
         message = 'Task created successfully'; // success message if the task was created
     }
 
     return { message }; // return the message indicating the result of the operation
 }
 
-function getTaskById(id) {
-    const task = db.query('SELECT * FROM tasks WHERE id = ?', [id]); // query the database for a task with the given id
+async function getTaskById(id) {
+    const task = await pool.query('SELECT * FROM tasks WHERE id = $1', [id]); // query the database for a task with the given id
 
-    if (!task.length) {
+    if (!task.rows.length) {
         let error = new Error('Task not found'); // throw an error if the task is not found
         error.status = 404; // set the error status to 404 (Not Found)
         throw error;
     }
 
-    return task[0]; // return the found task
+    return { task: task.rows[0] }; // return the found task
 }
 
-function updatedTaskById(id, task) {
+async function updateTaskById(id, task) {
     validateCreate(task); // validate the task object before updating it
     const { task_name, task_description, completed } = task; // destructure the task object to get its properties
 
@@ -85,12 +87,12 @@ function updatedTaskById(id, task) {
 
     const isCompleted = completed ? 1 : 0; // convert the boolean completed value to an integer (1 for true, 0 for false)
 
-    const result = db.run(
-        'UPDATE tasks SET task_name = @task_name, task_description = @task_description, completed = @completed, updated_at = @updated_at WHERE id = @id',
-        { id, task_name, task_description, completed: isCompleted, updated_at: currentTimestamp }
+    const result = await pool.query(
+        'UPDATE tasks SET task_name = $1, task_description = $2, completed = $3, updated_at = $4 WHERE id = $5',
+        [task_name, task_description, isCompleted, currentTimestamp, id]
     );
 
-    if (!result.changes) {
+    if (result.rowCount === 0) {
         let error = new Error('Task not found'); // throw an error if the task is not found
         error.status = 404; // set the error status to 404 (Not Found)
         throw error;
@@ -99,10 +101,10 @@ function updatedTaskById(id, task) {
     return { message: 'Task updated successfully' }; // return a success message
 }
 
-function deleteTaskById(id) {
-    const result = db.run('DELETE FROM tasks WHERE id = ?', [id]); // delete the task with the given id from the database
+async function deleteTaskById(id) {
+    const result = await pool.query('DELETE FROM tasks WHERE id = $1', [id]); // delete the task with the given id from the database
 
-    if (!result.changes) {
+    if (result.rowCount === 0) {
         let error = new Error('Task not found'); // throw an error if the task is not found
         error.status = 404; // set the error status to 404 (Not Found)
         throw error;
@@ -112,6 +114,6 @@ export default {
     getAllTasks,
     getTaskById,
     deleteTaskById,
-    updatedTaskById,
+    updateTaskById,
     createTask
 }

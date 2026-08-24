@@ -15,10 +15,12 @@
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "body-parser": "^2.3.0",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "install": "^0.13.0",
     "nodemon": "^3.1.14",
     "npm": "^12.0.2",
+    "pg": "^8.23.0",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^14.0.1"
