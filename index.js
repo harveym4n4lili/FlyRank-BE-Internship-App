@@ -47,21 +47,42 @@ app.get('/public/info', (req, res) => {
   }); 
 });
 
-app.get('/protected/info', async (req, res) => {
+/**
+ * @swagger
+ * /protected/profile:
+ *   get:
+ *     summary: Get user profile (protected - requires valid token)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved
+ *       401:
+ *         description: Invalid or expired token
+ */
+app.get('/protected/profile', async (req, res) => {
+  const auth = req.get('Authorization');
+
+  // Check if Authorization header exists
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  // Extract token
+  const token = auth.slice(7);
+
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      throw error;
+    // Verify token with Supabase
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data.user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    res.send({
-      "message": "Welcome back! This info is private.",
-      "user": session.user
-    });
+    // Return user data
+    return res.status(200).json(data.user);
   } catch (error) {
-    console.error('Error during private info retrieval:', error.message);
-    res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });
 
