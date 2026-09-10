@@ -3,16 +3,29 @@ import bodyParser from 'body-parser';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './src/swagger.js';
 import tasksRouter from './src/routes/tasks.js';
+import supabase from './src/db/supabase.js';
 import initDB from './src/db/init.js';
 
 const app = express();
 const PORT = 3000;
 
+// try {
+//   await initDB();
+// } catch (error) {
+//   console.error('Failed to initialize database:', error.message);
+//   process.exit(1);
+// }
+
 try {
-  await initDB();
-} catch (error) {
-  console.error('Failed to initialize database:', error.message);
-  process.exit(1);
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    throw error;
+  } 
+  console.log('Supabase session retrieved successfully:', data);
+}
+  catch (error) {
+    console.error('Error during Supabase session retrieval:', error.message);
+    process.exit(1);
 }
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec)); // Serve Swagger UI at /api-docs
