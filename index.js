@@ -3,6 +3,7 @@ import bodyParser from 'body-parser';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './src/swagger.js';
 import tasksRouter from './src/routes/tasks.js';
+import authRouter from './src/routes/auth.js';
 import supabase from './src/db/supabase.js';
 import initDB from './src/db/init.js';
 
@@ -43,6 +44,8 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.status(200).send({ status: 'Server is running and healthy :)' });
 }); // Health check route to verify if the server is running
+
+app.use('/auth', authRouter); // Use the auth router file for routes starting with /auth
 
 app.use('/tasks', tasksRouter); // Use the tasks router file  for routes starting with /tasks
 
