@@ -41,6 +41,30 @@ app.get('/', (req, res) => {
   });
 }); // Root route to test the server
 
+app.get('/public/info', (req, res) => {
+  res.send({
+    "message": "Welcome stranger! This info is public."
+  }); 
+});
+
+app.get('/protected/info', async (req, res) => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      throw error;
+    }
+
+    res.send({
+      "message": "Welcome back! This info is private.",
+      "user": session.user
+    });
+  } catch (error) {
+    console.error('Error during private info retrieval:', error.message);
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.status(200).send({ status: 'Server is running and healthy :)' });
 }); // Health check route to verify if the server is running
