@@ -29,27 +29,6 @@ once no matter how often the script is re-run.
 
 ---
 
-## Run it
-
-```bash
-cd scraper
-npm install
-npm start
-```
-
-Outputs land in `output/`:
-
-| File | What it holds |
-|------|---------------|
-| `books.json` | The validated records |
-| `errors.json` | Records that failed validation, with the reason |
-| `run-report.json` | Counts, failures, cache hits, duration |
-
-Saved HTML goes to `cache/` (git-ignored). The first run fetches from the site; later runs read the cache, so
-the site is asked once no matter how many times you re-run the script.
-
----
-
 ## Record schema
 
 <!-- TODO Stage 4: document the finished record shape here once the Zod schema exists. -->
@@ -60,13 +39,14 @@ the site is asked once no matter how many times you re-run the script.
 
 Every request that actually leaves this machine:
 
-<!-- TODO Stage 1-3: fill in as you build them. -->
-
-- **User-agent:**
-- **Timeout:**
-- **Delay between requests:**
-- **Status check:**
-- **Cache:**
+- **User-agent:** `FlyRankInternshipA9/1.0 (+https://github.com/harveym4n4lili/FlyRank-BE-Internship-App)`
+  — an honest name with a link back, so anyone reading their server logs can see who is calling.
+- **Timeout:** 10 seconds. A request that hangs forever would block the whole run.
+- **Delay between requests:** <!-- TODO Stage 2 -->
+- **Status check:** the status code is checked *before* the body is read. Only `200` is treated as a page;
+  anything else is a failed fetch, not HTML to parse.
+- **Cache:** every fetched page is saved to `cache/`. Later runs read the saved copy, so the site is asked for
+  each page exactly once no matter how many times the script is re-run during development.
 
 ---
 
