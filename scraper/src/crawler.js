@@ -12,7 +12,11 @@ const MAX_PAGES = 3;
  */
 export async function discoverBookUrls() {
   const cataloguePages = [];
-  const bookUrls = [];
+
+  // keyed by product URL, so a book seen twice is still stored once. the value
+  // remembers which catalogue page it was found on — that is its provenance.
+  const booksByUrl = new Map();
+  let discovered = 0;
 
   let pageUrl = START_URL;
   let pageNumber = 1;
@@ -30,7 +34,13 @@ export async function discoverBookUrls() {
 
       // hrefs here are relative ("a-light-in-the-attic_1000/index.html"), so
       // resolve them against the page they came from. never glue strings.
-      bookUrls.push(new URL(href, pageUrl).href);
+      const productUrl = new URL(href, pageUrl).href;
+      discovered++;
+
+      // first sighting wins, so source_page names where we really found it
+      if (!booksByUrl.has(productUrl)) {
+        booksByUrl.set(productUrl, { product_url: productUrl, source_page: pageUrl });
+      }
     });
 
     // let the site tell us where the next page is instead of inventing the URL
@@ -39,8 +49,5 @@ export async function discoverBookUrls() {
     pageNumber++;
   }
 
-  // a Set keeps only the first sighting of each URL
-  const uniqueUrls = [...new Set(bookUrls)];
-
-  return { cataloguePages, discovered: bookUrls.length, uniqueUrls };
+  return { cataloguePages, discovered, uniqueBooks: [...booksByUrl.values()] };
 }

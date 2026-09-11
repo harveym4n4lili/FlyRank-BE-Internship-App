@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,8 +36,13 @@ export async function fetchPage(url, cacheName) {
   // 1. check for saved copy in cache
   try {
     const html = await readFile(cachePath, 'utf8');
+
+    // these bytes arrived when the cache file was written, not now. provenance
+    // should record when the fact was actually collected from the site.
+    const { mtime } = await stat(cachePath);
+
     console.log(`CACHE HIT  ${cacheName}  ${html.length} bytes`);
-    return { html, fromCache: true };
+    return { html, fromCache: true, fetchedAt: mtime.toISOString() };
   } catch (error) {
     // ENOENT just means "not cached yet" — any other error is a real problem
     if (error.code !== 'ENOENT') throw error;
@@ -58,11 +63,12 @@ export async function fetchPage(url, cacheName) {
   }
 
   const html = await response.text();
+  const fetchedAt = new Date().toISOString();
 
   // 4. save it, so the next fifty runs never leave this machine.
   await mkdir(CACHE_DIR, { recursive: true });
   await writeFile(cachePath, html, 'utf8');
 
   console.log(`FETCH      ${cacheName}  ${html.length} bytes`);
-  return { html, fromCache: false };
+  return { html, fromCache: false, fetchedAt };
 }
