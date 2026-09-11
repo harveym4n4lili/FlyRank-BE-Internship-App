@@ -42,32 +42,7 @@ This repo contains weekly branches for the FlyRank AI Internship Backend Program
    - Visit `http://localhost:3000/docs` for Swagger UI
    - Or use curl: `curl http://localhost:3000/tasks`
 
-## A2: Why was SQLite chosen?
-1. SQLite doesn't need a separate database server running. The database file lives directly in the project.
-2. Requires no credentials or connection strings, simple enough for learning purposes
-3. Sqlite has a synchronous API it works well with such as better-sqlite3 which is javascript friendly and is easy to learn.
-### Database Location
-`project-root/src/db/tasks.db`
-### Database Query Exploration
+### Swagger UI with Bearer Auth
 
-**1. Find tasks updated in the last 24 hours:**
-```sql
-SELECT * FROM tasks 
-WHERE updated_at > datetime('now', '-1 day');
-```
-
-**2. Get tasks by completion status:**
-```sql
-SELECT * FROM tasks WHERE completed = 1;  -- Completed tasks
-SELECT * FROM tasks WHERE completed = 0;  -- Open tasks
-```
-
-**3. Get tasks ordered by creation date (newest first):**
-```sql
-SELECT * FROM tasks ORDER BY created_at DESC;
-```
-#### Database Viewer
-For my database viewer, I installed a VSCode extension called SQLite3 Editor, which allows me to open db files and run SQL queries all within VSCode.
-
-![SQLite Database Viewer](./screenshots/screenshot-db.png)
+![Swagger UI showing lock icons on protected routes and Authorize button](./screenshots/screenshot-lock-icon.png)
 ---
