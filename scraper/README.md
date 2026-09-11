@@ -42,7 +42,9 @@ Every request that actually leaves this machine:
 - **User-agent:** `FlyRankInternshipA9/1.0 (+https://github.com/harveym4n4lili/FlyRank-BE-Internship-App)`
   — an honest name with a link back, so anyone reading their server logs can see who is calling.
 - **Timeout:** 10 seconds. A request that hangs forever would block the whole run.
-- **Delay between requests:** <!-- TODO Stage 2 -->
+- **Delay between requests:** at least 500 ms between any two requests that actually reach the site. The gap is
+  enforced inside the fetcher rather than by its callers, so no code path can skip it by accident. Cache hits
+  never wait — they never leave this machine.
 - **Status check:** the status code is checked *before* the body is read. Only `200` is treated as a page;
   anything else is a failed fetch, not HTML to parse.
 - **Cache:** every fetched page is saved to `cache/`. Later runs read the saved copy, so the site is asked for

@@ -13,6 +13,22 @@ const TIMEOUT_MS = 10_000;
 // cache/ sits next to src/, not wherever the terminal happens to be
 const CACHE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'cache');
 
+// minimum gap between two requests that actually reach the site
+const DELAY_MS = 500;
+
+// when the last real request went out (0 = none yet this run)
+let lastRequestAt = 0;
+
+// hold the next real request back until at least DELAY_MS has passed since the
+// last one. cache hits never call this, so reading saved pages stays instant.
+async function waitTurn() {
+  const sinceLastRequest = Date.now() - lastRequestAt;
+  if (sinceLastRequest < DELAY_MS) {
+    await new Promise((resolve) => setTimeout(resolve, DELAY_MS - sinceLastRequest));
+  }
+  lastRequestAt = Date.now();
+}
+
 
 export async function fetchPage(url, cacheName) {
   const cachePath = join(CACHE_DIR, cacheName);
@@ -27,7 +43,9 @@ export async function fetchPage(url, cacheName) {
     if (error.code !== 'ENOENT') throw error;
   }
 
-  // 2. not cached. ask the site — with a name and a deadline.
+  // 2. not cached. wait our turn, then ask the site — with a name and a deadline.
+  await waitTurn();
+
   const response = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT },
     signal: AbortSignal.timeout(TIMEOUT_MS),
