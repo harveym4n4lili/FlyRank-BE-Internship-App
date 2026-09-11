@@ -29,6 +29,36 @@ once no matter how often the script is re-run.
 
 ---
 
+## Run it
+
+Requires **Node.js 20 or newer** (the scraper uses the built-in `fetch`). Nothing else — no database, no API
+key, no account.
+
+```bash
+cd scraper
+npm install
+npm start
+```
+
+That is the whole setup. The first run fetches 63 pages from the site at a deliberate 500 ms apart, so it takes
+about half a minute; every run after that reads from the local cache and finishes in well under a second.
+
+Three files land in `output/`:
+
+| File | What it holds |
+|------|---------------|
+| `books.json` | The 60 validated records |
+| `errors.json` | Records that failed schema validation, with the reason |
+| `run-report.json` | Counts, failures, cache hits, and duration for that run |
+
+Saved HTML goes to `cache/` (git-ignored). The site is asked for each page exactly once no matter how many
+times the script is re-run.
+
+**Built with:** Node.js · [Cheerio](https://cheerio.js.org/) for parsing · [Zod](https://zod.dev/) for schema
+validation.
+
+---
+
 ## Record schema
 
 Every record is checked against a Zod schema (`src/schema.js`) **before** it is written. A record that fails
@@ -115,22 +145,97 @@ deliberately — never by hammering the real site.
 
 ## Honest limitation
 
-<!-- TODO Stage 6: one real limitation of this scraper. -->
+**The `description` field contains duplicated text.** Books to Scrape renders a truncated preview *and* the
+full description inside the same `<p>` element, to drive its expand/collapse widget. The scraper captures that
+paragraph faithfully, so most descriptions read as the first ~350 characters, then the whole text again, ending
+in `...more`.
+
+This is deliberate. Stage 3's rule is to store what the page actually said and never invent or silently trim
+text, so the duplication is preserved rather than cleaned away. Splitting it reliably would mean guessing at
+where the preview ends — and a guess that is wrong on one book in sixty is worse than honest raw text. A
+cleaning step belongs in normalization, with the raw value kept alongside it, which is exactly what
+`price_text` / `price_gbp` already does for prices.
+
+Two smaller ones worth naming:
+
+- **The delay is a flat 500 ms.** It does not read a `Retry-After` header or back off exponentially, so a site
+  actively asking for more patience would not be heard.
+- **Selectors assume this site's markup.** `.product_main`, `li.next` and `star-rating` are specific to Books
+  to Scrape. A layout change breaks extraction — quietly, since the run would still report success with empty
+  fields. Schema validation is the backstop, and it is why `title` and `price_gbp` are required.
 
 ---
 
 ## Why no browser was needed
 
-<!-- TODO Stage 6: one sentence. -->
+Every field this scraper collects is already present in the HTML the server sends, so a headless browser would
+only add startup time, memory, and complexity to arrive at exactly the same bytes — you can confirm it by
+viewing the page source and finding all 20 book titles sitting there in plain markup.
 
 ---
 
 ## Ethics note
 
-<!-- TODO Stage 6: in your own words. -->
+Scraping is reading someone else's server on their dime, so the rules I hold myself to are simple:
+
+- **Use an official API when one exists.** If the site publishes the data deliberately, take it that way — it
+  is cheaper for them, more stable for me, and unambiguous about permission.
+- **Never bypass a login, a paywall, or a block.** Those are the site saying no. A `403` is an answer, not an
+  obstacle to route around.
+- **Collect only what I need.** Three catalogue pages, nine fields. Not the whole site because it was there.
+- **Classify before writing code.** Check what the site says about itself and what its `robots.txt` asks for,
+  and write the answer down before the first request — not after.
+- **Identify myself and go slowly.** A real user-agent with a link back, and a delay that means the site barely
+  notices I was there.
+
+The habit underneath all of it: a scraper is a guest. Being technically able to take something is not the same
+as being welcome to.
 
 ---
 
 ## Sample run report
 
-<!-- TODO Stage 6: paste a real output/run-report.json here as proof. -->
+A real `output/run-report.json`, from a cached re-run:
+
+```json
+{
+  "started_at": "2026-09-11T17:23:08.680Z",
+  "finished_at": "2026-09-11T17:23:08.864Z",
+  "duration_seconds": 0.18,
+  "catalogue_pages": 3,
+  "book_urls_discovered": 60,
+  "book_urls_unique": 60,
+  "pages_fetched": 0,
+  "cache_hits": 63,
+  "retries": 0,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 0,
+  "failures": []
+}
+```
+
+`pages_fetched: 0` alongside `cache_hits: 63` is the cache doing its job: this run produced all 60 records
+without sending a single request to the site.
+
+And the same run with a deliberately broken URL injected (`npm start -- --inject-failure`):
+
+```json
+{
+  "duration_seconds": 0.66,
+  "book_urls_discovered": 60,
+  "book_urls_unique": 61,
+  "cache_hits": 63,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 1,
+  "failures": [
+    {
+      "product_url": "https://books.toscrape.com/catalogue/this-book-does-not-exist_9999/index.html",
+      "reason": "https://books.toscrape.com/catalogue/this-book-does-not-exist_9999/index.html returned 404 Not Found"
+    }
+  ]
+}
+```
+
+The run finished, the 404 was not retried, and all 60 good records still reached `books.json`.
