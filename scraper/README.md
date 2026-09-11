@@ -31,7 +31,40 @@ once no matter how often the script is re-run.
 
 ## Record schema
 
-<!-- TODO Stage 4: document the finished record shape here once the Zod schema exists. -->
+Every record is checked against a Zod schema (`src/schema.js`) **before** it is written. A record that fails
+goes to `errors.json` with the reason and never reaches `books.json`.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `title` | string | non-empty |
+| `product_url` | string | the canonical URL — the record's identity. Must start with `https://` |
+| `price_text` | string | exactly as the page wrote it, e.g. `"£51.77"` |
+| `price_gbp` | number | the cleaned value, e.g. `51.77` |
+| `availability_text` | string | e.g. `"In stock (22 available)"` |
+| `rating_text` | string | e.g. `"Three"` — the page stores this in a CSS class, not as text |
+| `description` | string \| null | **the only optional field.** `null` when the book has none — never invented |
+| `source_page` | string | which catalogue page this book was found on |
+| `fetched_at` | string | ISO timestamp of when the HTML actually arrived from the site |
+
+The raw text and the cleaned value live side by side on purpose: when a price looks wrong weeks later, you want
+to see what the page said, not only what the scraper made of it.
+
+```json
+{
+  "title": "A Light in the Attic",
+  "product_url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+  "price_text": "£51.77",
+  "price_gbp": 51.77,
+  "availability_text": "In stock (22 available)",
+  "rating_text": "Three",
+  "description": "It's hard to imagine a world without A Light in the Attic...",
+  "source_page": "https://books.toscrape.com/catalogue/page-1.html",
+  "fetched_at": "2026-09-11T10:58:11.482Z"
+}
+```
+
+**Idempotency:** each run replaces the output files rather than appending, and book URLs are de-duplicated
+during discovery. Running the scraper twice produces the same 60 records — not 120.
 
 ---
 
