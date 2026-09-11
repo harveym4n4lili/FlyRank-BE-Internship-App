@@ -85,6 +85,34 @@ Every request that actually leaves this machine:
 
 ---
 
+## Failure handling
+
+One broken page must not take the run down. Each page is handled on its own: a page that cannot be fetched or
+parsed is logged, skipped, and counted — the other records still make it through.
+
+| Situation | What happens |
+|-----------|--------------|
+| Timeout, or a `5xx` server error | Wait a second, try **once** more |
+| `404 Not Found` | No retry — the page does not exist, so asking again will not create it |
+| `403 Forbidden` | No retry — the site said no, and asking again is how a polite robot becomes a pest |
+| Still failing after that | Logged and skipped; recorded in `run-report.json` with its reason |
+
+Every run ends by writing `output/run-report.json` with start time, duration, pages fetched, cache hits,
+retries, valid records, invalid records, and failed pages. A scraper that reports nothing can fail silently for
+weeks.
+
+### Proving it
+
+```bash
+npm start -- --inject-failure
+```
+
+That adds a single book URL which does not exist. The run still finishes, the 60 good records still land in
+`books.json`, and the report shows `failed_pages: 1` with the reason. Failure is injected on **our** side
+deliberately — never by hammering the real site.
+
+---
+
 ## Honest limitation
 
 <!-- TODO Stage 6: one real limitation of this scraper. -->
