@@ -1,0 +1,7 @@
+# Saved HTML copies — hundreds of files, never committed
+cache/
+
+# Dependencies
+node_modules/
+
+# Note: output/ is NOT ignored — one sample run is committed as evidence
