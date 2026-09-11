@@ -1,5 +1,6 @@
 import express from 'express';
 import supabase from '../db/supabase.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -108,6 +109,34 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Error during login:', error.message);
     return res.status(401).json({ error: 'Invalid login credentials' });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Log out and end session
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User logged out successfully
+ *       401:
+ *         description: Missing or invalid token
+ *       400:
+ *         description: Failed to logout
+ */
+router.post('/logout', authMiddleware, async (req, res) => {
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      throw error;
+    }
+    return res.status(204).json({ message: 'Successfully logged out' });
+  } catch (error) {
+    console.error('Error during logout:', error.message);
+    return res.status(400).json({ error: 'Failed to logout' });
   }
 });
 

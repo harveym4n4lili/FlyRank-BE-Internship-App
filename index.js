@@ -5,6 +5,7 @@ import swaggerSpec from './src/swagger.js';
 import tasksRouter from './src/routes/tasks.js';
 import authRouter from './src/routes/auth.js';
 import supabase from './src/db/supabase.js';
+import authMiddleware from './src/middleware/auth.js';
 import initDB from './src/db/init.js';
 
 const app = express();
@@ -60,30 +61,9 @@ app.get('/public/info', (req, res) => {
  *       401:
  *         description: Invalid or expired token
  */
-app.get('/protected/profile', async (req, res) => {
-  const auth = req.get('Authorization');
-
-  // Check if Authorization header exists
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  // Extract token
-  const token = auth.slice(7);
-
-  try {
-    // Verify token with Supabase
-    const { data, error } = await supabase.auth.getUser(token);
-
-    if (error || !data.user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    // Return user data
-    return res.status(200).json(data.user);
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
+app.get('/protected/profile', authMiddleware, async (req, res) => {
+  // The authMiddleware will attach the user to the request
+  return res.status(200).json(req.user);
 });
 
 app.get('/health', (req, res) => {
