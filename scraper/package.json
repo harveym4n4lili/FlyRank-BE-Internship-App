@@ -1,0 +1,17 @@
+{
+  "name": "polite-scraper",
+  "version": "1.0.0",
+  "description": "A polite scraping pipeline for books.toscrape.com — fetch, extract, normalize, validate, store, report",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": ["scraper", "cheerio", "zod"],
+  "author": "harveym4n4lili",
+  "license": "ISC",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "zod": "^3.24.1"
+  }
+}
