@@ -4,6 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './src/swagger.js';
 import tasksRouter from './src/routes/tasks.js';
 import authRouter from './src/routes/auth.js';
+import enrichRouter from './src/routes/enrich.js';
 import supabase from './src/db/supabase.js';
 import authMiddleware from './src/middleware/auth.js';
 import initDB from './src/db/init.js';
