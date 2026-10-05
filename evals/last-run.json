@@ -1,0 +1,217 @@
+{
+  "date": "2026-10-05",
+  "prompt_version": "enrich-v1",
+  "endpoint": "http://localhost:3000/enrich",
+  "category_score": "8/8",
+  "all_checks_score": "8/8",
+  "models": [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "liquid/lfm-2.5-2.6b:free",
+    "inclusionai/ling-3.0-flash-sante:free",
+    "dots-studio/dots-3-note-preview:free",
+    "cohere/north-mini-code:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "poolside/laguna-xs-2.1:free"
+  ],
+  "results": [
+    {
+      "id": 1,
+      "kind": "typical",
+      "title": "Sharp Objects",
+      "expected": {
+        "category": "fiction"
+      },
+      "status": 200,
+      "got": {
+        "category": "fiction",
+        "summary": "A journalist returns to her hometown to cover two teenage murders, confronting her own dark past.",
+        "quality_flags": [
+          "duplicated_description",
+          "truncated",
+          "promotional_language"
+        ],
+        "confidence": 0.97,
+        "reason": "The description tells a fictional story about a journalist confronting her past."
+      },
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 24176
+    },
+    {
+      "id": 2,
+      "kind": "typical",
+      "title": "Foolproof Preserving: A Guide to Small Batch Jams, Jellies, Pickles, Condiments, and More: A Foolproof Guide to Making Small Batch Jams, Jellies, Pickles, Condiments, and More",
+      "expected": {
+        "category": "nonfiction"
+      },
+      "status": 200,
+      "got": {
+        "category": "nonfiction",
+        "summary": "A comprehensive guide to small batch canning and preserving various foods like jams, jellies, pickles, and condiments with over 100 recipes.",
+        "quality_flags": [
+          "truncated",
+          "promotional_language"
+        ],
+        "confidence": 0.98,
+        "reason": "It is a practical cookbook providing detailed canning instructions and recipes for home food preservation."
+      },
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 3080
+    },
+    {
+      "id": 3,
+      "kind": "typical",
+      "title": "Slow States of Collapse: Poems",
+      "expected": {
+        "category": "poetry"
+      },
+      "status": 200,
+      "got": {
+        "category": "poetry",
+        "summary": "A debut poetry collection exploring resilience, love, grief, and power through day-to-day conflicts and personal narrative.",
+        "quality_flags": [
+          "duplicated_description",
+          "promotional_language",
+          "truncated"
+        ],
+        "confidence": 0.95,
+        "reason": "It is explicitly a poetry collection by a Canadian poet."
+      },
+      "model": "inclusionai/ling-3.0-flash-sante:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 7366
+    },
+    {
+      "id": 4,
+      "kind": "typical",
+      "title": "The Bear and the Piano",
+      "expected": {
+        "category": "childrens"
+      },
+      "status": 200,
+      "got": {
+        "category": "childrens",
+        "summary": "A young bear discovers a piano in the forest, learns to play, and embarks on a journey to New York, becoming a star while longing for home.",
+        "quality_flags": [
+          "duplicated_description",
+          "truncated"
+        ],
+        "confidence": 0.9,
+        "reason": "The description repeats itself and ends with ...more, indicating duplication and truncation, but the title clearly points to a children's story."
+      },
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 15661
+    },
+    {
+      "id": 5,
+      "kind": "typical",
+      "title": "This One Summer",
+      "expected": {
+        "category": "graphic_novel"
+      },
+      "status": 200,
+      "got": {
+        "category": "graphic_novel",
+        "summary": "A graphic novel following Rose through a challenging summer at a lake house, where family strife and new problems test her friendship and resilience.",
+        "quality_flags": [
+          "duplicated_description",
+          "truncated",
+          "promotional_language"
+        ],
+        "confidence": 0.9,
+        "reason": "The description explicitly states it is a teen graphic novel."
+      },
+      "model": "dots-studio/dots-3-note-preview:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 15046
+    },
+    {
+      "id": 6,
+      "kind": "ambiguous",
+      "title": "Sophie's World",
+      "expected": {
+        "category": "fiction"
+      },
+      "status": 200,
+      "got": {
+        "category": "fiction",
+        "summary": "A Norwegian teenage girl receives mysterious letters about identity and existence, leading her into a philosophical correspondence that explores Western thought from Socrates to Sartre.",
+        "quality_flags": [
+          "truncated",
+          "promotional_language"
+        ],
+        "confidence": 0.95,
+        "reason": "It is a fictional novel about a teenage girl's philosophical journey."
+      },
+      "model": "cohere/north-mini-code:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 11208
+    },
+    {
+      "id": 7,
+      "kind": "unsure",
+      "title": "Collected Notes",
+      "expected": {
+        "category": "other",
+        "max_confidence": 0.49,
+        "flags_include": [
+          "missing_description"
+        ]
+      },
+      "status": 200,
+      "got": {
+        "category": "other",
+        "summary": "A collection of notes.",
+        "quality_flags": [
+          "missing_description"
+        ],
+        "confidence": 0.3,
+        "reason": "The title alone does not provide enough information to determine a specific category."
+      },
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 2659
+    },
+    {
+      "id": 8,
+      "kind": "hostile",
+      "title": "In Her Wake",
+      "expected": {
+        "category": "fiction"
+      },
+      "status": 200,
+      "got": {
+        "category": "fiction",
+        "summary": "A woman's comfortable life shatters when a family secret forces her to uncover a 25-year mystery on the Cornish coast.",
+        "quality_flags": [
+          "duplicated_description",
+          "truncated",
+          "promotional_language"
+        ],
+        "confidence": 0.95,
+        "reason": "The description describes a psychological thriller, indicating a work of fiction."
+      },
+      "model": "poolside/laguna-xs-2.1:free",
+      "category_ok": true,
+      "all_checks_ok": true,
+      "problems": [],
+      "duration_ms": 53053
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './src/swagger.js';
 import tasksRouter from './src/routes/tasks.js';
 import authRouter from './src/routes/auth.js';
+import enrichRouter from './src/routes/enrich.js';
 import supabase from './src/db/supabase.js';
 import authMiddleware from './src/middleware/auth.js';
 import initDB from './src/db/init.js';
@@ -72,7 +73,11 @@ app.get('/health', (req, res) => {
 
 app.use('/auth', authRouter); // Use the auth router file for routes starting with /auth
 
+app.use('/enrich', enrichRouter); // Use the enrich router file for routes starting with /enrich
+
 app.use('/tasks', tasksRouter); // Use the tasks router file  for routes starting with /tasks
+
+app.use('/enrich', enrichRouter); // Use the enrich router file for routes starting with /enrich
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
