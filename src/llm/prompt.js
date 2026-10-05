@@ -18,5 +18,8 @@ export async function loadPrompt() {
   if (cachedPrompt === null) {
     cachedPrompt = await readFile(join(PROMPTS_DIR, `${PROMPT_VERSION}.md`), 'utf8');
   }
+
+  console.log(`Using prompt version ${PROMPT_VERSION}:\n${cachedPrompt}\n`);
+
   return cachedPrompt;
 }

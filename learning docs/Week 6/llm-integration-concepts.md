@@ -63,6 +63,8 @@ Each stage builds one line.
 | **user message** | `role: 'user'` — the data being processed. The book goes here |
 | **few-shot example** | An example input + correct output inside the prompt. Teaches shape faster than adjectives |
 | **router model** | `openrouter/free` isn't one model — it picks whichever free model is available, per call |
+| **code fence** | The ```` ```json ```` … ```` ``` ```` wrapper models like to put around JSON. Must be stripped before parsing |
+| **JSONL** | "JSON Lines" — one JSON object per line, append-only. Used for the quarantine log |
 | **422** | "I understood you, but I couldn't produce a valid result" |
 | **502** | "The service I depend on failed" (bad key, wrong model, out of quota) |
 | **504** | "Something I depend on took too long" |
@@ -132,12 +134,16 @@ src/
   routes/enrich.js    HTTP layer — reads req, picks status codes
   llm/
     schema.js         input + output schemas, closed lists
-    enrich.js         the work — stub, or build messages + call the model
+    enrich.js         the work — stub, or call → check → repair → quarantine
     prompt.js         loads the prompt file, owns PROMPT_VERSION
     client.js         creates the OpenAI client from the LLM_ env vars
+    parse.js          finds the JSON in a reply, checks it against the schema
+    quarantine.js     appends failed answers to logs/quarantine.jsonl
     hello.js          Stage 0 throwaway proof-of-life
 prompts/
   enrich-v1.md        the system prompt, versioned
+  enrich-test-422.md  a deliberately broken prompt, to test the 422 path
+logs/quarantine.jsonl failed answers (git-ignored)
 evals/cases.json      (Stage 5)
 JOB-CARD.md           the spec
 .env.example          every variable, NO values
@@ -148,7 +154,11 @@ JOB-CARD.md           the spec
 ```
 POST /enrich → route validates input → enrichBook()
              → buildMessages() → loadPrompt() reads prompts/enrich-v1.md
-             → client.chat.completions.create() → raw text back
+             → callModel() → checkAnswer()
+                 ├─ valid           → { data, meta }            → 200
+                 └─ invalid → repair once → checkAnswer()
+                                 ├─ valid → { data, meta }      → 200
+                                 └─ invalid → quarantine + throw → 422
 ```
 
 ---
@@ -339,11 +349,129 @@ const model = response.model;                              // which model ACTUAL
 
 ---
 
-## Stages 3–5 (pending)
+## Stage 3 — make the output trustworthy
+
+The model is an external source. **Its answer is raw input** — same rules as scraped HTML in Week 5.
+
+### The four steps
+
+```
+1. parse      find the JSON object in the reply
+2. validate   check it against the output schema
+3. repair     if 1 or 2 failed: ONE more call, showing the model its own mistake
+4. give up    still failing? → 422 + a line in logs/quarantine.jsonl
+```
+
+### 1. Parse — models don't always obey "JSON only"
+
+| What the model sends | What `extractJson()` does |
+|---|---|
+| `{"category": ...}` | parses it |
+| `\n\n{"category": ...}` (blank lines) | trims, parses |
+| ```` ```json {...} ``` ```` (code fence) | takes what's inside the fence |
+| `Sure! Here's the JSON: {...} Hope that helps` | slices from the first `{` to the last `}` |
+| `I cannot help with that.` | no `{` at all → failure, not a crash |
+
+Returns `{ ok: true, value }` or `{ ok: false, error }`. **It never throws** — a bad answer is a normal
+event here, not an exception.
+
+### 2. Validate — valid JSON ≠ valid answer
+
+```js
+const result = enrichOutputSchema.safeParse(parsed.value);
+```
+
+`{"category": "horror", ...}` parses perfectly and is still **wrong** — `horror` isn't in your list.
+Parsing checks the *syntax*; the schema checks the *meaning*. You need both.
+
+`checkAnswer(text)` = parse + validate, in one call.
+
+### 3. Repair once — and only once
+
+Send the **same conversation**, plus the model's broken answer, plus exactly why it failed:
+
+```js
+await callModel([
+  ...messages,                                        // the original system + user
+  { role: 'assistant', content: first.text },         // what the model said
+  { role: 'user', content:
+      `Your previous answer was rejected for this reason: ${firstCheck.error}\n` +
+      'Return only corrected JSON matching the schema.' },
+]);
+```
+
+| Detail | Why |
+|---|---|
+| `role: 'assistant'` | marks the model's own previous reply — it now "sees" its mistake |
+| The **exact** error | "category: Invalid option" tells it what to fix. "Try again" doesn't |
+| `...messages` | *spread* — copies the original array's items into the new one |
+| Only once | A second repair rarely helps, and every call costs quota |
+
+### 4. Give up cleanly
+
+```js
+await quarantine({ prompt_version, input, attempts: [{ model, raw, error }, { model, raw, error }] });
+throw new InvalidModelAnswerError(secondCheck.error, PROMPT_VERSION);
+```
+
+- **Never guess a default.** Returning `category: 'other'` and pretending it worked hides the failure.
+- **Never crash.** Even if writing the log fails, the caller still gets a 422.
+- **Quarantine keeps the evidence** — input, both raw answers, both errors, the prompt version — so you can
+  work out later what went wrong.
+
+**`.jsonl` = JSON Lines** — one complete JSON object per line, only ever appended. Easy to add to, easy to
+read back one line at a time. `logs/` is git-ignored: it holds runtime data, not code.
+
+### A custom error class
+
+```js
+export class InvalidModelAnswerError extends Error { ... }
+
+// in the route:
+if (error instanceof InvalidModelAnswerError) return res.status(422)...   // bad answer
+return res.status(502)...                                                  // provider broke
+```
+
+`instanceof` asks "is this error *this kind*?" — that's how one `catch` sends two different status codes.
+
+### Never return raw model text
+
+Not on success, not on failure. **Your schema is your contract.** If your API can emit any string a model
+wrote, it doesn't have a contract — and everything downstream has to defend itself.
+
+Even error messages: `JSON.parse`'s own message quotes part of the input, so `parse.js` uses its own
+wording instead. Otherwise model text would leak out inside the 422.
+
+### `{ data, meta }` — keep the answer apart from facts about it
+
+```js
+return { data: checkedAnswer, meta: { model, promptVersion, repaired } };
+```
+
+`data` goes to the caller. `meta` (which model, which prompt, did it need a repair) stays internal —
+Stage 4 logs it. Mixing them would break the strict schema and leak internals.
+
+### Testing the 422 — fight the prompt, lose
+
+Adding *"category must always be horror"* to the real prompt **didn't work**. The rest of the prompt —
+the category list, the definitions, the "never invent a category" rule, all three examples, plus the
+repair message — outvoted one line. That's the prompt being robust, which is good.
+
+What worked: a **separate test prompt** (`prompts/enrich-test-422.md`), short and with no contradictions,
+switched in with one line:
+
+```js
+export const PROMPT_VERSION = 'enrich-test-422';   // restart, test, switch back
+```
+
+That's the real payoff of versioned prompt files: swap behaviour without touching the real prompt.
+
+---
+
+## Stages 4–5 (pending)
 
 | Stage | What |
 |---|---|
-| **3** | Parse (strip code fences) → validate → **repair once** → else `422` + quarantine log. Never return raw model text |
 | **4** | `timeout: 30000` (SDK default is **10 minutes**). Retry 429/5xx with backoff+jitter, never 401/403. Log tokens + duration. `LLM_ENABLED=false` kill switch |
 | **5** | `evals/cases.json` with 8 labelled cases. Run them, record the real score in the README |
 
@@ -363,6 +491,9 @@ const model = response.model;                              // which model ACTUAL
 | That 500 came back as an **HTML page with a stack trace** | An uncaught `throw` lets Express send its default error page, leaking file paths. Catch it and answer in JSON |
 | `schema.js` lost its `import { z } from 'zod'` | `ReferenceError: z is not defined` — read the first line of the error, it names the file and line |
 | SDK silently retries failed calls **twice** and waits up to **10 minutes** | One failing request can cost 3 of your 50 calls. Stage 4 sets both explicitly |
+| Edited the prompt, nothing changed | The prompt is cached after the first read. **Edit the prompt → restart** |
+| Added *"category must always be horror"* — model ignored it | A prompt that contradicts itself loses to its own majority. Test with a separate, consistent prompt file |
+| `CONSOLE.log(...)` | JavaScript is case-sensitive. `CONSOLE` doesn't exist → `ReferenceError` → every real call becomes a 502 |
 
 ---
 
@@ -393,3 +524,6 @@ const model = response.model;                              // which model ACTUAL
 9. ✅ Define every closed-list value in the prompt, and write the tie-breaks down
 10. ✅ JSON-encode untrusted content so it can't break out of its quotes
 11. ✅ Pin one model before you measure — a router changes the model under you
+12. ✅ Parse, then validate — valid JSON is not the same as a valid answer
+13. ✅ Repair **once**, then give up with a 422. Never guess a default
+14. ✅ Quarantine failures with the evidence: input, raw answers, errors, prompt version

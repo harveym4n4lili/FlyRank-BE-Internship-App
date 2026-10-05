@@ -7,6 +7,9 @@ npm-debug.log*
 .env.local
 .env.*.local
 
+# Runtime logs (quarantined model answers)
+logs/
+
 # Temporary files
 .tmp/
 temp/

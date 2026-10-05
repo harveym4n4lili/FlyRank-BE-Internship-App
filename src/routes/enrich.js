@@ -1,5 +1,5 @@
 import express from 'express';
-import { enrichBook } from '../llm/enrich.js';
+import { enrichBook, InvalidModelAnswerError } from '../llm/enrich.js';
 import {
   enrichInputSchema,
   enrichOutputSchema,
@@ -48,6 +48,8 @@ const router = express.Router();
  *                   type: string
  *       400:
  *         description: Invalid input - the response names the offending field
+ *       422:
+ *         description: The model's answer was still invalid after one repair attempt
  *       502:
  *         description: The model provider call failed
  */
@@ -71,10 +73,23 @@ router.post('/', async (req, res) => {
     };
 
   // 3. Do the work. In stub mode this never touches the network.
+  //    enrichBook parses, validates and repairs the model's answer itself, so
+  //    raw model text never reaches this file, let alone the caller.
     let result;
     try {
         result = await enrichBook(book);
     } catch (error) {
+        // the model answered, but even after one repair the answer did not
+        // match our schema. it has been logged to logs/quarantine.jsonl.
+        // the message is our own wording, never the model's text.
+        if (error instanceof InvalidModelAnswerError) {
+            return res.status(422).json({
+                error: 'The model did not return a valid answer, even after one repair attempt.',
+                detail: error.message,
+                prompt_version: error.promptVersion,
+            });
+        }
+
         // the provider call failed (bad key, wrong model, out of quota...).
         // answer in JSON instead of letting Express send an HTML page with a
         // stack trace. Stage 4 splits this into 504 (timeout) and 503 (kill switch).
@@ -85,24 +100,12 @@ router.post('/', async (req, res) => {
         });
     }
 
-  // STAGE 2 ONLY: a real model answer comes back as unchecked text, returned
-  // as-is so you can read it with your own eyes. Stage 3 deletes this branch:
-  // the text gets parsed, validated and repaired, and raw model text is never
-  // returned to a caller again.
-    if ('raw' in result) {
-        return res.status(200).json({
-            prompt_version: result.promptVersion,
-            model: result.model,
-            raw: result.raw,
-        });
-    }
-
-  // 4. Validate our own output before returning it.
+  // 4. Validate the output one last time before it leaves the building.
   //
-  //    This runs even in stub mode, on purpose: it proves the stub actually
-  //    satisfies the contract. A stub that quietly does not match the schema
-  //    is a lie that costs an hour at Stage 3.
-    const output = enrichOutputSchema.safeParse(result);
+  //    enrichBook already checked it, so this should never fail. It stays as a
+  //    final guard on the contract: if it ever does fail, that's a bug in our
+  //    own code, so the answer is a 500 rather than a 422.
+    const output = enrichOutputSchema.safeParse(result.data);
 
     if (!output.success) {
         return res.status(500).json({
