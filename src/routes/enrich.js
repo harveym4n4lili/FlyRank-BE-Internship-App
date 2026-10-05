@@ -130,6 +130,12 @@ router.post('/', async (req, res) => {
     // exactly — and a caller storing results needs to know which ones to skip.
     res.set('X-Enrichment-Source', result.meta.source);
 
+    // which model actually answered. openrouter/free picks a different one per
+    // call, so the eval script records this next to every result.
+    if (result.meta.model) {
+        res.set('X-Enrichment-Model', result.meta.model);
+    }
+
     return res.status(200).json(output.data);
 });
 
