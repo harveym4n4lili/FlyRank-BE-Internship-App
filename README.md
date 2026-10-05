@@ -111,4 +111,45 @@ on your own laptop. No code changes:
 
 That is why none of them is named after a company.
 
+### The prompt
+
+The prompt lives in [prompts/enrich-v1.md](./prompts/enrich-v1.md), not in a string inside the route, so it
+can be versioned, reviewed and diffed like any other code. It has five parts: the role, the exact output shape
+with a definition for every category and flag, the rules, what to do when unsure, and three examples (typical,
+ambiguous and a prompt-injection attempt).
+
+The book is sent as a separate `user` message and JSON-encoded, so text in a scraped description cannot
+break out of its quotes or pose as part of the instructions. Calls use `temperature: 0`.
+
+### First real answers (prompt v1, 2026-10-05)
+
+Three real records from the Week 5 scraper, sent with `LLM_STUB=0`:
+
+| Book | Category returned | Correct? | Model that answered |
+|---|---|---|---|
+| A Light in the Attic | `poetry` | Yes — the format-over-audience tie-break worked | `dots-studio/dots-3-note-preview:free` |
+| Sapiens | `nonfiction` | Yes | `nvidia/nemotron-3.5-lightning:free` |
+| Scott Pilgrim's Precious Little Life | `graphic_novel` | Yes | `cohere/north-mini-code:free` |
+
+All three answers parsed as JSON and passed the output schema.
+
+**What surprised me:**
+
+- **A different model answered every call.** `openrouter/free` routes each request to whichever free model is
+  available, so `temperature: 0` does not guarantee the same answer twice — the model itself changes. That
+  matters for the Stage 5 eval: a score can move because the router picked a different model, not because the
+  prompt changed.
+- **Same shape, different formatting.** One answer started with two blank lines, one was pretty-printed over
+  several lines, one was a single compact line. None used a code fence, but nothing guarantees that. A parser
+  has to cope with all of these.
+- **The schema can't catch wrong facts.** The Scott Pilgrim summary calls him a "bassist", which is not in
+  the description, and the reason calls him "a teenager" when the description says he is 23. Both answers
+  passed validation, because the schema checks shape, not truth. The model also identified the book as a comic
+  from outside knowledge, since the description never says so.
+- **Confidence was 0.95 every time.** Three different models, three books, the same number. As it stands,
+  `confidence` carries almost no information.
+- **The flags are judgement calls.** Sapiens and A Light in the Attic were flagged for `promotional_language`;
+  Scott Pilgrim ("totally sweet", "seriously mind-blowing") was not. The line between hype and a lively
+  narrative voice is fuzzy, and different models draw it differently.
+
 ---

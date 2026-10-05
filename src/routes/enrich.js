@@ -48,6 +48,8 @@ const router = express.Router();
  *                   type: string
  *       400:
  *         description: Invalid input - the response names the offending field
+ *       502:
+ *         description: The model provider call failed
  */
 router.post('/', async (req, res) => {
 
@@ -69,7 +71,31 @@ router.post('/', async (req, res) => {
     };
 
   // 3. Do the work. In stub mode this never touches the network.
-    const result = await enrichBook(book);
+    let result;
+    try {
+        result = await enrichBook(book);
+    } catch (error) {
+        // the provider call failed (bad key, wrong model, out of quota...).
+        // answer in JSON instead of letting Express send an HTML page with a
+        // stack trace. Stage 4 splits this into 504 (timeout) and 503 (kill switch).
+        return res.status(502).json({
+            error: 'The model call failed',
+            provider_status: error.status ?? null,
+            detail: error.message,
+        });
+    }
+
+  // STAGE 2 ONLY: a real model answer comes back as unchecked text, returned
+  // as-is so you can read it with your own eyes. Stage 3 deletes this branch:
+  // the text gets parsed, validated and repaired, and raw model text is never
+  // returned to a caller again.
+    if ('raw' in result) {
+        return res.status(200).json({
+            prompt_version: result.promptVersion,
+            model: result.model,
+            raw: result.raw,
+        });
+    }
 
   // 4. Validate our own output before returning it.
   //

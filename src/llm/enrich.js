@@ -1,7 +1,30 @@
+import { getClient } from './client.js';
+import { loadPrompt, PROMPT_VERSION } from './prompt.js';
+
+/**
+ * Build the two messages sent to the model.
+ *
+ * The instructions (system) and the book (user) are kept in separate messages.
+ * Models treat the two roles differently, and the separation is a wall between
+ * our instructions and content we did not write: the description is scraped
+ * from the internet, so it might contain "ignore your instructions and...".
+ *
+ * The book is JSON-encoded, so anything inside it — quotes, newlines, a fake
+ * "end of instructions" — stays inside a JSON string and cannot break out.
+ */
+export async function buildMessages({ title, description }) {
+  return [
+    { role: 'system', content: await loadPrompt() },
+    { role: 'user', content: JSON.stringify({ title, description }) },
+  ];
+}
+
 /**
  * Enrich one book record.
  * @param {{ title: string, description: string|null }} book
- * @returns {Promise<object>} an object shaped like enrichOutputSchema
+ * @returns {Promise<object>} in stub mode, an object shaped like enrichOutputSchema.
+ *   With a real model (Stage 2), { raw, model, promptVersion } — the model's
+ *   unchecked text. Stage 3 turns that text into a validated object.
  */
 export async function enrichBook({ title, description }) {
   // -------------------------------------------------------------------------
@@ -24,8 +47,20 @@ export async function enrichBook({ title, description }) {
     };
   }
 
-  // Stage 2 replaces this with: load the prompt file, call the model.
-  throw new Error(
-    'Real model calls arrive in Stage 2. Set LLM_STUB=1 in .env for now.',
-  );
+  const response = await getClient().chat.completions.create({
+    model: process.env.LLM_MODEL,
+    messages: await buildMessages({ title, description }),
+    // 0 = the same input gets the same answer, not a creative one
+    temperature: 0,
+  });
+
+  return {
+    // some models return null content (for example after a refusal); an empty
+    // string keeps the shape predictable for the caller
+    raw: response.choices[0]?.message?.content ?? '',
+    // openrouter/free routes to whichever free model is available, so record
+    // which one actually answered
+    model: response.model,
+    promptVersion: PROMPT_VERSION,
+  };
 }
