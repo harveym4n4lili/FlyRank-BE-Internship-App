@@ -1,19 +1,16 @@
-import { getClient } from './client.js';
+import { getClient, LLM_TIMEOUT_MS } from './client.js';
 import { loadPrompt, PROMPT_VERSION } from './prompt.js';
 import { checkAnswer } from './parse.js';
 import { quarantine } from './quarantine.js';
+import { withRetry, isTimeout } from './retry.js';
+import { logEvent } from './log.js';
+import { InvalidModelAnswerError, ModelTimeoutError } from './errors.js';
 
-/**
- * Thrown when the model's answer still fails after one repair attempt.
- * The route turns this into a 422. It carries our own error wording only —
- * never the model's text to avoid leaking it to the client — and the prompt version that produced it.
- */
-export class InvalidModelAnswerError extends Error {
-  constructor(reason, promptVersion) {
-    super(reason);
-    this.name = 'InvalidModelAnswerError';
-    this.promptVersion = promptVersion;
-  }
+// the kill switch. LLM_ENABLED=false turns the model off without a deploy —
+// for a provider outage, a bill spike, or a model saying something it
+// shouldn't. anything else (including the variable being missing) leaves it on.
+function llmEnabled() {
+  return process.env.LLM_ENABLED !== 'false';
 }
 
 /**
@@ -34,24 +31,71 @@ export async function buildMessages({ title, description }) {
   ];
 }
 
-// one call to the model. returns its raw text and which model answered.
-async function callModel(messages) {
-  const response = await getClient().chat.completions.create({
-    model: process.env.LLM_MODEL,
-    messages,
-    // 0 = the same input gets the same answer, not a creative one
-    temperature: 0,
-  });
+/**
+ * One call to the model — retried under the rules in retry.js — returning its
+ * raw text and which model answered.
+ *
+ * Every attempt writes one structured log line: the cost log. That is what
+ * answers "how much will this cost at ten thousand requests a day".
+ *
+ * @param {Array} messages
+ * @param {'first'|'repair'} purpose  whether this is the first try or the repair
+ */
+async function callModel(messages, purpose) {
+  try {
+    return await withRetry(async (retry) => {
+      const startedAt = Date.now();
 
-  return {
-    // some models return null content (for example after a refusal); an empty
-    // string keeps it a string, and checkAnswer then rejects it like any other
-    // bad answer
-    text: response.choices[0]?.message?.content ?? '',
-    // openrouter/free routes to whichever free model is available, so record
-    // which one actually answered
-    model: response.model,
-  };
+      try {
+        const response = await getClient().chat.completions.create({
+          model: process.env.LLM_MODEL,
+          messages,
+          // 0 = the same input gets the same answer, not a creative one
+          temperature: 0,
+        });
+
+        logEvent('llm_call', {
+          outcome: 'ok',
+          prompt_version: PROMPT_VERSION,
+          // openrouter/free routes to whichever free model is available, so
+          // record which one actually answered
+          model: response.model,
+          repair: purpose === 'repair',
+          retry,
+          input_tokens: response.usage?.prompt_tokens ?? null,
+          output_tokens: response.usage?.completion_tokens ?? null,
+          duration_ms: Date.now() - startedAt,
+        });
+
+        return {
+          // some models return null content (for example after a refusal); an
+          // empty string keeps it a string, and checkAnswer then rejects it
+          // like any other bad answer
+          text: response.choices[0]?.message?.content ?? '',
+          model: response.model,
+        };
+      } catch (error) {
+        // failed calls are logged too: on a metered tier they still cost quota
+        logEvent('llm_call', {
+          outcome: 'error',
+          prompt_version: PROMPT_VERSION,
+          model: process.env.LLM_MODEL,
+          repair: purpose === 'repair',
+          retry,
+          status: isTimeout(error) ? 'timeout' : (error.status ?? 'no response'),
+          duration_ms: Date.now() - startedAt,
+        });
+        throw error;
+      }
+    });
+  } catch (error) {
+    // still timing out after the retries: turn the SDK's error into our own,
+    // so the route can answer 504 without knowing which SDK we use
+    if (isTimeout(error)) {
+      throw new ModelTimeoutError(LLM_TIMEOUT_MS);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -59,11 +103,36 @@ async function callModel(messages) {
  * @param {{ title: string, description: string|null }} book
  * @returns {Promise<{ data: object, meta: object }>}
  *   data — an object that has passed enrichOutputSchema
- *   meta — how it was produced: which model, which prompt, whether it needed a
- *          repair. Kept apart from data so it never leaks into the contract.
+ *   meta — how it was produced: the source ('model', 'stub' or 'fallback'),
+ *          which model, which prompt, whether it needed a repair. Kept apart
+ *          from data so it never leaks into the contract.
  * @throws {InvalidModelAnswerError} when the answer is still invalid after one repair
+ * @throws {ModelTimeoutError} when the model is still too slow after retrying
  */
 export async function enrichBook({ title, description }) {
+  // -------------------------------------------------------------------------
+  // Kill switch. Checked before anything else, so when it is off no model call
+  // can happen — not even through stub mode's code path.
+  //
+  // The fallback is deterministic: the same book always gets the same answer,
+  // built by code from facts we already have. confidence 0 tells any caller
+  // that nothing was actually analysed.
+  // -------------------------------------------------------------------------
+  if (!llmEnabled()) {
+    logEvent('llm_skipped', { reason: 'kill switch (LLM_ENABLED=false)' });
+
+    return {
+      data: {
+        category: 'other',
+        summary: `Automatic enrichment is switched off, so "${title.slice(0, 120)}" was not analysed.`,
+        quality_flags: description ? [] : ['missing_description'],
+        confidence: 0,
+        reason: 'The AI feature is disabled, so a safe default was returned.',
+      },
+      meta: { source: 'fallback', model: null, promptVersion: PROMPT_VERSION, repaired: false },
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Stub mode. Not a toy — this is how every stage from here gets built.
   //
@@ -83,20 +152,20 @@ export async function enrichBook({ title, description }) {
         confidence: 0.1,
         reason: 'Stub mode is on, so no model was consulted.',
       },
-      meta: { model: 'stub', promptVersion: PROMPT_VERSION, repaired: false },
+      meta: { source: 'stub', model: null, promptVersion: PROMPT_VERSION, repaired: false },
     };
   }
 
   const messages = await buildMessages({ title, description });
 
   // --- attempt 1 ------------------------------------------------------------
-  const first = await callModel(messages);
+  const first = await callModel(messages, 'first');
   const firstCheck = checkAnswer(first.text);
 
   if (firstCheck.ok) {
     return {
       data: firstCheck.data,
-      meta: { model: first.model, promptVersion: PROMPT_VERSION, repaired: false },
+      meta: { source: 'model', model: first.model, promptVersion: PROMPT_VERSION, repaired: false },
     };
   }
 
@@ -112,13 +181,13 @@ export async function enrichBook({ title, description }) {
         `Your previous answer was rejected for this reason: ${firstCheck.error}\n` +
         'Return only corrected JSON matching the schema.',
     },
-  ]);
+  ], 'repair');
   const secondCheck = checkAnswer(second.text);
 
   if (secondCheck.ok) {
     return {
       data: secondCheck.data,
-      meta: { model: second.model, promptVersion: PROMPT_VERSION, repaired: true },
+      meta: { source: 'model', model: second.model, promptVersion: PROMPT_VERSION, repaired: true },
     };
   }
 

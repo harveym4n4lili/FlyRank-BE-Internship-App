@@ -65,6 +65,11 @@ Each stage builds one line.
 | **router model** | `openrouter/free` isn't one model — it picks whichever free model is available, per call |
 | **code fence** | The ```` ```json ```` … ```` ``` ```` wrapper models like to put around JSON. Must be stripped before parsing |
 | **JSONL** | "JSON Lines" — one JSON object per line, append-only. Used for the quarantine log |
+| **backoff** | Wait longer after each failure — 1 s, then 2 s — instead of hammering a struggling server |
+| **jitter** | A small random extra wait, so many clients that failed together don't retry together |
+| **Retry-After** | A header where the server says exactly how long to wait. Seconds (`"7"`) **or** a date |
+| **structured log** | A log line that's a JSON object with named fields, so programs can search it |
+| **stdout** | The terminal output (`console.log`). Where logs should go — the environment decides what happens next |
 | **422** | "I understood you, but I couldn't produce a valid result" |
 | **502** | "The service I depend on failed" (bad key, wrong model, out of quota) |
 | **504** | "Something I depend on took too long" |
@@ -134,15 +139,17 @@ src/
   routes/enrich.js    HTTP layer — reads req, picks status codes
   llm/
     schema.js         input + output schemas, closed lists
-    enrich.js         the work — stub, or call → check → repair → quarantine
+    enrich.js         kill switch → stub → call → check → repair → quarantine
     prompt.js         loads the prompt file, owns PROMPT_VERSION
-    client.js         creates the OpenAI client from the LLM_ env vars
+    client.js         creates the client — 30 s timeout, SDK retries off
+    retry.js          what to retry, how long to wait, Retry-After
+    log.js            one structured JSON log line to stdout
+    errors.js         InvalidModelAnswerError (→422), ModelTimeoutError (→504)
     parse.js          finds the JSON in a reply, checks it against the schema
     quarantine.js     appends failed answers to logs/quarantine.jsonl
     hello.js          Stage 0 throwaway proof-of-life
 prompts/
   enrich-v1.md        the system prompt, versioned
-  enrich-test-422.md  a deliberately broken prompt, to test the 422 path
 logs/quarantine.jsonl failed answers (git-ignored)
 evals/cases.json      (Stage 5)
 JOB-CARD.md           the spec
@@ -153,8 +160,10 @@ JOB-CARD.md           the spec
 
 ```
 POST /enrich → route validates input → enrichBook()
+             → LLM_ENABLED=false ? → fallback                     → 200 (source: fallback)
              → buildMessages() → loadPrompt() reads prompts/enrich-v1.md
-             → callModel() → checkAnswer()
+             → callModel() (timeout + retries + cost log line)  → still timing out → 504
+             → checkAnswer()
                  ├─ valid           → { data, meta }            → 200
                  └─ invalid → repair once → checkAnswer()
                                  ├─ valid → { data, meta }      → 200
@@ -468,11 +477,177 @@ That's the real payoff of versioned prompt files: swap behaviour without touchin
 
 ---
 
-## Stages 4–5 (pending)
+## Stage 4 — fit to run in production
+
+Anyone can call an API once. This stage is about the other 9,999 times.
+
+### The four additions
+
+| Addition | Stops this from happening |
+|---|---|
+| **Timeout** | One slow model call holds a request open for 10 minutes and the endpoint looks dead |
+| **Retry policy** | A blip kills a request — *or* a bad key gets retried and burns quota |
+| **Cost log** | You can't answer "what does this cost at 10,000 a day?" |
+| **Kill switch** | An outage or bill spike needs a code deploy to stop |
+
+### 1. Timeout — never accept the SDK default
+
+```js
+new OpenAI({
+  baseURL, apiKey,
+  timeout: 30_000,   // ms. SDK default is 10 MINUTES
+  maxRetries: 0,     // SDK default is 2, SILENT
+});
+```
+
+`30_000` is just `30000` — the underscore is a readable digit separator.
+
+When the timeout fires, the SDK throws `APIConnectionTimeoutError` (with **no** `status`). `enrich.js` turns
+it into our own `ModelTimeoutError`, so the route can answer **504** without knowing which SDK we use.
+
+### 2. Retry only what retrying can fix
+
+| Failure | Retry? | Why |
+|---|---|---|
+| Timeout | ✅ | the model may just have been slow |
+| `429` rate limited | ✅ | may work after a short wait |
+| `5xx` server error | ✅ | their problem, may clear in a moment |
+| `400` bad request | ❌ | our request will still be wrong |
+| `401` bad key | ❌ | **a bad key is still bad 4 seconds later** |
+| `403` forbidden | ❌ | no stays no |
+| no status (network) | ❌ | a wrong `LLM_BASE_URL` doesn't fix itself |
+
+```js
+export function isRetryable(error) {
+  if (isTimeout(error)) return true;
+  if (error.status === 429) return true;
+  if (error.status >= 500) return true;
+  return false;
+}
+```
+
+### Backoff + jitter
+
+```js
+// retry 1 → 1000ms + up to 250ms random,  retry 2 → 2000ms + up to 250ms
+BASE_DELAY_MS * 2 ** (retryNumber - 1) + Math.random() * MAX_JITTER_MS
+```
+
+`2 ** n` is "2 to the power n" → 1, 2, 4 … that's what makes it *exponential*.
+
+**Why only 2 retries:** each attempt can take 30 s and costs one of your 50 daily calls. 3 retries = up to
+4 calls and 2+ minutes for one request.
+
+### Retry-After — obey it, in both formats
+
+```js
+const value = error.headers?.get?.('retry-after');
+const seconds = Number(value);                         // "7"  → 7000 ms
+if (Number.isFinite(seconds)) return seconds * 1000;
+const date = Date.parse(value);                        // "Wed, 21 Oct 2026 07:28:00 GMT"
+if (!Number.isNaN(date)) return date - Date.now();
+```
+
+Handling only the number is a real bug. And if the server asks for more than 10 s, **give up** — holding the
+caller's request open for a minute is worse than an honest error.
+
+### The retry loop
+
+```js
+export async function withRetry(attempt) {
+  for (let retry = 0; ; retry++) {            // no end condition — exits by return or throw
+    try {
+      return await attempt(retry);            // success → out
+    } catch (error) {
+      if (!isRetryable(error) || retry >= MAX_RETRIES) throw error;   // give up → out
+      await sleep(waitMs);                    // otherwise wait, loop again
+    }
+  }
+}
+```
+
+`attempt` is a **function passed in** — `withRetry` doesn't know it's calling a model. Any call can reuse it.
+
+### Never stack two retry systems
+
+SDK retries (2) × your retries (2) → up to **3 × 3 = 9 calls** for one request. Pick one, set it
+explicitly, write the choice in the README. **Silent defaults** are how you make six calls thinking you
+made one.
+
+### 3. Cost log — one JSON line per call
+
+```js
+logEvent('llm_call', {
+  outcome: 'ok', prompt_version, model: response.model,
+  repair: purpose === 'repair', retry,
+  input_tokens: response.usage?.prompt_tokens,
+  output_tokens: response.usage?.completion_tokens,
+  duration_ms: Date.now() - startedAt,
+});
+```
+
+```json
+{"at":"…","event":"llm_call","outcome":"ok","prompt_version":"enrich-v1","model":"…","repair":false,"retry":0,"input_tokens":1450,"output_tokens":80,"duration_ms":2100}
+```
+
+- **Log failed calls too** — on a metered tier they still cost quota.
+- **To stdout, not a file you invent** — where logs go is the environment's job.
+- `response.usage` holds the token counts. `prompt_tokens` = what you sent, `completion_tokens` = what came back.
+- Cost estimate = `(input_tokens × input price + output_tokens × output price) × requests per day`.
+
+### 4. Kill switch
+
+```js
+function llmEnabled() {
+  return process.env.LLM_ENABLED !== 'false';   // missing = ON, only "false" turns it off
+}
+```
+
+Checked **first** in `enrichBook()`, before stub mode, so when it's off no model call can happen.
+
+| Option | Returns |
+|---|---|
+| Deterministic **fallback** (chosen) | `200`, category `other`, `confidence: 0`, "was not analysed" |
+| Clean **503** | an error the caller must handle |
+
+*Deterministic* = built by code, so the same book always gets the same answer. `confidence: 0` and the
+`X-Enrichment-Source: fallback` header tell a caller it isn't a real answer.
+
+**Why every AI feature has one:** provider outage, bill spike, model saying something embarrassing. Someone who
+isn't you must be able to turn it off **without a deploy** — change an env var, restart.
+
+### Response header vs. body field
+
+```js
+res.set('X-Enrichment-Source', result.meta.source);   // 'model' | 'stub' | 'fallback'
+```
+
+The body must match the **strict** schema exactly, so extra facts about the answer go in a header, not a field.
+
+### One `catch`, four answers
+
+```js
+if (error instanceof InvalidModelAnswerError) → 422
+if (error instanceof ModelTimeoutError)       → 504
+otherwise                                     → 502   (401/403 arrive here instantly — never retried)
+```
+
+All error classes live in `errors.js`, so the route imports them from one place.
+
+### Proving it
+
+| Test | Expect | Calls |
+|---|---|---|
+| `LLM_ENABLED=false` | instant 200 fallback, `llm_skipped` in terminal, **no** `llm_call` | 0 |
+| Wrong `LLM_API_KEY` | fast 502, one `llm_call` with status 401, **no** `llm_retry` | 1 |
+| `LLM_TIMEOUT_MS = 1` (temporarily) | 3 timeout lines + 2 retry lines, then 504 | ≤3 |
+
+---
+
+## Stage 5 (pending)
 
 | Stage | What |
 |---|---|
-| **4** | `timeout: 30000` (SDK default is **10 minutes**). Retry 429/5xx with backoff+jitter, never 401/403. Log tokens + duration. `LLM_ENABLED=false` kill switch |
 | **5** | `evals/cases.json` with 8 labelled cases. Run them, record the real score in the README |
 
 ---
@@ -494,6 +669,8 @@ That's the real payoff of versioned prompt files: swap behaviour without touchin
 | Edited the prompt, nothing changed | The prompt is cached after the first read. **Edit the prompt → restart** |
 | Added *"category must always be horror"* — model ignored it | A prompt that contradicts itself loses to its own majority. Test with a separate, consistent prompt file |
 | `CONSOLE.log(...)` | JavaScript is case-sensitive. `CONSOLE` doesn't exist → `ReferenceError` → every real call becomes a 502 |
+| SDK left on `maxRetries` default under our own retry loop | Two retry systems multiply: up to 9 calls per request. Set the SDK's to `0` |
+| Logging the whole prompt on every call | ~4,800 characters per request buries the cost log lines. Log the version, not the text |
 
 ---
 
@@ -506,8 +683,9 @@ That's the real payoff of versioned prompt files: swap behaviour without touchin
 | `422` | Model's answer couldn't be repaired into valid JSON |
 | `500` | **Our** bug — our own result failed our own schema |
 | `502` | The provider call failed (bad key, wrong model, quota) |
-| `503` | Kill switch on (`LLM_ENABLED=false`) |
-| `504` | Model call timed out |
+| `504` | Model call timed out, even after retrying |
+
+The kill switch returns **200** with a fallback (header `X-Enrichment-Source: fallback`) rather than a `503`.
 
 ---
 
@@ -527,3 +705,7 @@ That's the real payoff of versioned prompt files: swap behaviour without touchin
 12. ✅ Parse, then validate — valid JSON is not the same as a valid answer
 13. ✅ Repair **once**, then give up with a 422. Never guess a default
 14. ✅ Quarantine failures with the evidence: input, raw answers, errors, prompt version
+15. ✅ Retry timeouts, 429 and 5xx with backoff + jitter. Obey Retry-After
+16. ✅ One retry system only — set the SDK's explicitly, never leave a silent default
+17. ✅ Log every call, failed ones too: model, tokens, duration, repair, retry
+18. ✅ Every AI feature has a kill switch that works without a deploy

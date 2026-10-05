@@ -1,5 +1,6 @@
 import express from 'express';
-import { enrichBook, InvalidModelAnswerError } from '../llm/enrich.js';
+import { enrichBook } from '../llm/enrich.js';
+import { InvalidModelAnswerError, ModelTimeoutError } from '../llm/errors.js';
 import {
   enrichInputSchema,
   enrichOutputSchema,
@@ -52,6 +53,8 @@ const router = express.Router();
  *         description: The model's answer was still invalid after one repair attempt
  *       502:
  *         description: The model provider call failed
+ *       504:
+ *         description: The model did not answer in time, even after retrying
  */
 router.post('/', async (req, res) => {
 
@@ -90,9 +93,17 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // the model was too slow, even after retrying
+        if (error instanceof ModelTimeoutError) {
+            return res.status(504).json({
+                error: 'The model took too long to answer. Please try again shortly.',
+                detail: error.message,
+            });
+        }
+
         // the provider call failed (bad key, wrong model, out of quota...).
         // answer in JSON instead of letting Express send an HTML page with a
-        // stack trace. Stage 4 splits this into 504 (timeout) and 503 (kill switch).
+        // stack trace. 401 and 403 land here immediately: they are never retried.
         return res.status(502).json({
             error: 'The model call failed',
             provider_status: error.status ?? null,
@@ -113,6 +124,11 @@ router.post('/', async (req, res) => {
             detail: describeIssues(output.error),
         });
     }
+
+    // where the answer came from: 'model', 'stub', or 'fallback' (kill switch).
+    // a header rather than a field, because the body must match the schema
+    // exactly — and a caller storing results needs to know which ones to skip.
+    res.set('X-Enrichment-Source', result.meta.source);
 
     return res.status(200).json(output.data);
 });

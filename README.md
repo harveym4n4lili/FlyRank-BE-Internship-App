@@ -152,4 +152,41 @@ All three answers parsed as JSON and passed the output schema.
   Scott Pilgrim ("totally sweet", "seriously mind-blowing") was not. The line between hype and a lively
   narrative voice is fuzzy, and different models draw it differently.
 
+### Production behaviour
+
+**Timeout:** every model call gives up after **30 seconds**. The SDK's default is ten minutes, which would
+leave the endpoint looking dead.
+
+**Retries:** the SDK's built-in retries are switched off (`maxRetries: 0`) and the endpoint uses its own retry
+logic instead, so every attempt is visible in the logs and `Retry-After` is obeyed. Timeouts, `429` and `5xx`
+are retried at most twice, waiting about 1 s and then 2 s plus a little random jitter. `400`, `401` and `403`
+are never retried: a bad key is still a bad key four seconds later, and each pointless retry spends real
+quota. If a `429` asks for a wait longer than 10 seconds, the endpoint gives up rather than hold the request
+open.
+
+**What each failure returns:**
+
+| Status | When |
+|---|---|
+| `400` | The input failed validation. No model call is made |
+| `422` | The model's answer was still invalid after one repair. Logged to `logs/quarantine.jsonl` |
+| `502` | The provider call failed: bad key, wrong model name, or out of quota |
+| `504` | The model did not answer within 30 seconds, even after retrying |
+
+**Cost log:** every model call, including failed ones, writes one JSON line to the terminal:
+
+| Field | Meaning |
+|---|---|
+| `prompt_version` | which prompt file produced the call |
+| `model` | which model actually answered (`openrouter/free` picks a different one per call) |
+| `repair` | `true` if this call was the repair attempt |
+| `retry` | `0` for the first try, `1`–`2` for retries |
+| `input_tokens`, `output_tokens` | what the call was billed for |
+| `duration_ms` | how long it took |
+
+**Kill switch:** set `LLM_ENABLED=false` and restart. The endpoint then makes no model calls at all and
+returns a deterministic fallback: category `other`, confidence `0`, and a summary saying the book was not
+analysed. The `X-Enrichment-Source` response header says where each answer came from (`model`, `stub` or
+`fallback`), so a caller storing results can tell a fallback from a real answer.
+
 ---
